@@ -25,6 +25,8 @@ Publish the configuration file.
 php artisan vendor:publish --provider="Wovosoft\LaravelMessenger\ServiceProvider" --tag="config"
 ```
 
+Publish Resources
+
 ```bash
 php artisan vendor:publish --provider="Wovosoft\LaravelMessenger\ServiceProvider" --tag="resources"
 ```
