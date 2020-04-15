@@ -19,9 +19,28 @@ composer require wovosoft/laravel-messenger
 
 ### Publish Configuration File
 
+Publish the configuration file.
+
 ```bash
 php artisan vendor:publish --provider="Wovosoft\LaravelMessenger\ServiceProvider" --tag="config"
 ```
+
+```bash
+php artisan vendor:publish --provider="Wovosoft\LaravelMessenger\ServiceProvider" --tag="resources"
+```
+
+Publish the Migrations
+
+```bash
+php artisan vendor:publish --provider="Wovosoft\LaravelMessenger\ServiceProvider" --tag="migrations"
+```
+
+Publish the Seeds
+
+```bash
+php artisan vendor:publish --provider="Wovosoft\LaravelMessenger\ServiceProvider" --tag="seeds"
+```
+
 
 ## Usage
 

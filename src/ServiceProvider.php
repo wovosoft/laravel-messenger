@@ -31,5 +31,16 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
         );
 
         $this->app->bind('LaravelMessenger', LaravelMessenger::class);
+        $this->publishes([
+            __DIR__ . '/../resources' => resource_path('wovosoft/laravel-messenger'),
+        ], 'resources');
+
+        $this->publishes([
+            __DIR__ . '/../database/migrations' => database_path('migrations'),
+        ], 'migrations');
+
+        $this->publishes([
+            __DIR__ . '/Seeds' => database_path('migrations/seeds'),
+        ], 'seeds');
     }
 }
