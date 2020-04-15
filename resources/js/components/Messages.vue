@@ -3,14 +3,10 @@
         <div class="col-md-4 col-lg-3 h-100">
             <b-card header-class="p-1" body-class="h-100 p-0 overflow-auto">
                 <template v-slot:header>
-                    <b-input-group>
-                        <b-form-input type="search" placeholder="Search..."></b-form-input>
-                        <template v-slot:append>
-                            <b-button>
-                                <i class="fa fa-search"></i>
-                            </b-button>
-                        </template>
-                    </b-input-group>
+                    <b-form-input @input="getInboxContacts(null,true)"
+                                  v-model="search_users"
+                                  type="search"
+                                  placeholder="Search..."></b-form-input>
                 </template>
                 <b-list-group style="max-height: 80vh">
                     <b-list-group-item
@@ -117,7 +113,8 @@
                 message_loading: 'load more...',
                 message_fetch_auto: false,
                 refresh_interval: 3, //seconds,
-                interval: null
+                interval: null,
+                search_users: null
             }
         },
         mounted() {
@@ -184,6 +181,9 @@
                 return array.slice(Math.max(array.length - n, 0));
             },
             getConversation(user_id, refresh = false, url = null) {
+                if (!user_id) {
+                    return false;
+                }
                 this.message_loading = "updating conversation...";
                 axios.post(url || "/backend/LaravelMessenger/conversation", {user_id})
                     .then(res => {
@@ -212,17 +212,21 @@
                         console.log(err.response);
                     });
             },
-            getInboxContacts(url = null) {
-                axios.post(url || "/backend/LaravelMessenger/inboxContacts")
-                    .then(res => {
+            getInboxContacts(url = null, reset = false) {
+                axios.post(url || "/backend/LaravelMessenger/inboxContacts", {
+                    query: this.search_users
+                }).then(res => {
+                    if (reset) {
+                        this.contacts = res.data.data;
+                    } else {
                         res.data.data.forEach(item => this.contacts.push(item));
-                        this.contacts_next_page_url = res.data.next_page_url
-                        console.log(res);
-                    })
-                    .catch(err => {
-                        this.contacts = [];
-                        console.log(err.response);
-                    });
+                    }
+                    this.contacts_next_page_url = res.data.next_page_url
+                    // console.log(res);
+                }).catch(err => {
+                    this.contacts = [];
+                    console.log(err.response);
+                });
             }
         }
     }

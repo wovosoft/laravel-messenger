@@ -4,11 +4,9 @@
 namespace Wovosoft\LaravelMessenger\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-
+use Illuminate\Support\Facades\DB;
 use App\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpFoundation\Response;
 use Wovosoft\LaravelMessenger\Models\Messages as ItemModel;
@@ -27,6 +25,12 @@ class MessagesController extends Controller
 
     public function store(Request $request)
     {
+//        Messages::where('sender_id',1)
+//            ->orWhere('receiver_id',1)
+//            ->select('sender_id','receiver_id',DB::raw("CASE(WHEN sender_id=1 THEN sender_id ELSE receiver_id END) as tt"))
+//            ->get()
+//            ->toArray()
+        Messages::where('sender_id',1)->orWhere('receiver_id',1)->select(DB::raw("DISTINCT (CASE WHEN sender_id=1 THEN receiver_id ELSE sender_id END) as tt"))->get()->toArray();
         try {
             if ($item = Messages::send(auth()->id(), User::class, $request->post('send_to'), User::class, $request->post('message'), true)) {
                 $item->sender = auth()->user();
@@ -77,7 +81,15 @@ class MessagesController extends Controller
 
     public function inboxContacts(Request $request)
     {
-        return User::query()
+        $contacts = User::query();
+        if ($request->has('query') && $request->post('query')) {
+            $contacts->where(function ($q) use ($request) {
+                $q
+                    ->where('name', 'LIKE', '%' . $request->post('query') . '%')
+                    ->orWhere('email', 'LIKE', '%' . $request->post('query') . '%');
+            });
+        }
+        return $contacts
             ->where('id', '!=', auth()->id())
             ->paginate($request->has('per_page') ? $request->post('per_page') : 20);
     }
