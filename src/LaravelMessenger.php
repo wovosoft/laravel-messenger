@@ -3,7 +3,7 @@
 namespace Wovosoft\LaravelMessenger;
 
 use App\User;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 use Wovosoft\LaravelMessenger\Models\Messages;
 
 class LaravelMessenger
@@ -78,13 +78,36 @@ class LaravelMessenger
         }
     }
 
-    public function contacts()
+    /**
+     * @param Request $request
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
+     */
+    public function contacts(Request $request)
     {
-        return config("laravel-messenger.contacts_from")::query();
-    }
 
-    public function conversionByModel($sender, $receiver)
-    {
-        $messages = $sender->messages;
+        $contacts = Messages::query()
+            ->where('sender_id', auth()->id())
+            ->orWhere('receiver_id', auth()->id())
+            ->selectRaw("(CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END) as id", [auth()->id()])
+            ->latest()
+            ->get()
+            ->unique('id')
+            ->pluck('id')
+            ->toArray();
+
+
+        $conversations = config('laravel-messenger.contacts_from')::query();
+
+        if ($request->has('query') && $request->post('query')) {
+            $conversations->where(function ($q) use ($request) {
+                $q
+                    ->where('name', 'LIKE', '%' . $request->post('query') . '%')
+                    ->orWhere('email', 'LIKE', '%' . $request->post('query') . '%');
+            });
+        }
+        return $conversations
+            ->whereIn('id', $contacts)
+            ->orderByRaw("FIELD(id, " . implode(', ', $contacts) . ")")
+            ->paginate($request->post('per_page') ?? 15);
     }
 }

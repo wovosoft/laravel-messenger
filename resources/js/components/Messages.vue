@@ -3,12 +3,19 @@
         <div class="col-md-4 col-lg-3 h-100">
             <b-card header-class="p-1" body-class="h-100 p-0 overflow-auto">
                 <template v-slot:header>
-                    <b-form-input @input="getInboxContacts(null,true)"
-                                  v-model="search_users"
-                                  type="search"
-                                  placeholder="Search..."></b-form-input>
+                    <b-input-group>
+                        <b-form-input @input="getInboxContacts(null,true)"
+                                      v-model="search_users"
+                                      type="search"
+                                      placeholder="Search Conversations..."></b-form-input>
+                        <template v-slot:append>
+                            <b-button title="New Conversation" v-b-modal.addConversation>
+                                <i class="fa fa-plus"></i>
+                            </b-button>
+                        </template>
+                    </b-input-group>
                 </template>
-                <b-list-group style="max-height: 80vh">
+                <b-list-group style="max-height: 80vh" class="contacts">
                     <b-list-group-item
                         class="border-right-0 border-left-0"
                         @click="current_user=contact"
@@ -36,15 +43,9 @@
                             {{current_user?(current_user.name +' ( '+current_user.email+' ) '):user_name_email}}
                         </div>
                         <div class="col text-right" @click="getConversation($route.params.user_id,true)">
-                            <b-form-checkbox v-model="message_fetch_auto" switch inline
-                                             @input="()=>{
-                                                if(message_fetch_auto){
-                                                    setMessagesRefresh();
-                                                }else {
-                                                    clearMessagesRefresh();
-                                                }
-                                             }"
-                            >
+                            <b-form-checkbox v-model="message_fetch_auto"
+                                             switch inline
+                                             @input="message_fetch_auto? setMessagesRefresh(): clearMessagesRefresh()">
                                 Auto Refresh
                             </b-form-checkbox>
                             <input type="number" style="max-width: 100px"
@@ -84,22 +85,66 @@
                 </b-list-group>
 
                 <template v-slot:footer>
-                    <b-form-textarea @keypress.ctrl.enter="sendMessage"
+                    <b-form-textarea @keypress.ctrl.enter="sendMessage()"
                                      title="Press CTRL+Enter to Send the Message"
                                      v-model="message"
                                      placeholder="Write the Message Here... Press CTRL+Enter to Send the Message"></b-form-textarea>
                 </template>
             </b-card>
         </div>
+        <b-modal id="addConversation"
+                 header-bg-variant="dark"
+                 header-text-variant="light"
+                 size="lg"
+                 title="New Conversation"
+                 @hidden="()=>{send_to=null;message=null;}">
+            <form
+                @submit.prevent="sendMessage(send_to,message,(res)=>{
+                    $bvModal.hide('addConversation');
+                    search_users_typehead=null;
+                    getInboxContacts( null, true);
+                    // $log(res.data.data, $router.resolve({name:'Messages',params:{user_id:res.data.receiver_id}}))
+                    $router.push({name:'Messages',params:{user_id:res.data.data.receiver_id}});
+                })">
+                <type-head :search="search_users_typehead"
+                           :search-items="searchItems"
+                           autocomplete="off"
+                           placeholder="Search Users"
+                           @selected="item=>send_to=item.id">
+                    <template v-slot:option="item">
+                        {{item.id}} # {{item.name}} | {{item.email}}
+                    </template>
+                </type-head>
+                <b-form-group label="Message">
+                    <b-form-textarea v-model="message" placeholder="Say Hi! to"></b-form-textarea>
+                </b-form-group>
+                <button type="submit" ref="add_conversion_submit" class="d-none">SUBMIT</button>
+            </form>
+            <template v-slot:modal-footer="{close}">
+                <b-button variant="primary" @click="()=>{$refs.add_conversion_submit.click()}">Send</b-button>
+                <b-button @click="close()">Close</b-button>
+            </template>
+        </b-modal>
     </div>
 </template>
 
 <script>
     import {msgBox} from "@/partials/datatable";
     import autolink from "./../partials/autolink"
+    import TypeHead from "../partials/TypeHead";
+    import Pusher from "pusher-js";
 
     export default {
         name: "Messages",
+        components: {
+            TypeHead
+        },
+        props: {
+            users_search_url: {
+                type: String,
+                default: "/backend/users/search"
+            }
+        },
         data() {
             return {
                 current_user: null,
@@ -114,7 +159,9 @@
                 message_fetch_auto: false,
                 refresh_interval: 3, //seconds,
                 interval: null,
-                search_users: null
+                search_users: null,
+                search_users_typehead: null,
+                send_to: null
             }
         },
         mounted() {
@@ -122,6 +169,15 @@
             if (this.$route.params.user_id) {
                 this.getConversation(this.$route.params.user_id);
             }
+            window.Echo
+                .private('my-channel')
+                // .listen('.pusher:subscription_succeeded', e => console.log(("Channel Subscribed")))
+                .listen('.NewMessage', (e) => {
+                    if (Number(this.$route.params.user_id) === Number(e.message.sender_id)) {
+                        this.messages.push(e.message);
+                        setTimeout(() => this.scrollBottom(), 10);
+                    }
+                });
         },
         beforeRouteUpdate(to, from, next) {
             this.messages = [];
@@ -153,11 +209,11 @@
                 el.scrollTop = bottom ? el.scrollHeight : 0;
             },
 
-            sendMessage(e) {
-                if (e.target.value) {
+            sendMessage(send_to = null, message = null, cb = null) {
+                if (message || this.message) {
                     axios.post("/backend/LaravelMessenger/store", {
-                        message: e.target.value,
-                        send_to: this.$route.params.user_id
+                        message: message || this.message,
+                        send_to: send_to || this.$route.params.user_id
                     }).then(res => {
                         if (res.data.status) {
                             this.messages.push(res.data.data);
@@ -165,6 +221,9 @@
                             setTimeout(() => this.scrollBottom(), 10);
                         } else {
                             this.msgBox(res.data);
+                        }
+                        if (typeof cb === "function") {
+                            cb(res);
                         }
                         // console.log(res)
                     }).catch(err => {
@@ -179,6 +238,15 @@
                 if (n == null)
                     return array[array.length - 1];
                 return array.slice(Math.max(array.length - n, 0));
+            },
+            getUser(user_id) {
+                axios.post("/backend/LaravelMessenger/getUser", {
+                    user_id: user_id
+                }).then(res => {
+                    this.contacts = [res.data, ...this.contacts];
+                }).catch(err => {
+                    console.log(err.response);
+                });
             },
             getConversation(user_id, refresh = false, url = null) {
                 if (!user_id) {
@@ -195,7 +263,6 @@
                         if (refresh) {
                             this.messages = res.data.data;
                         } else {
-
                             res.data.data.forEach(item => this.messages.push(item));
                         }
 
@@ -203,6 +270,9 @@
                         this.user_name_email = res.headers.user_name_email;
                         this.messages_next_page_url = res.data.next_page_url;
                         this.message_loading = "load more...";
+                        if (!this.contacts.map(i => Number(i.id)).includes(Number(this.$route.params.user_id))) {
+                            this.getUser(this.$route.params.user_id);
+                        }
                         setTimeout(() => this.scrollBottom(!url), 10);
                     })
                     .catch(err => {
@@ -227,11 +297,27 @@
                     this.contacts = [];
                     console.log(err.response);
                 });
+            },
+            searchItems(search) {
+                if (!search) {
+                    this.users = [];
+                    return false;
+                }
+                return axios.post(this.users_search_url, {
+                    search: search
+                });
+            },
+            selectUser(user) {
+                console.log(user)
+                this.search = '';
             }
         }
     }
 </script>
 
 <style lang="scss" scoped>
+    .messages_holder, .contacts {
+
+    }
 
 </style>
